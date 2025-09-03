@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech Recognition Quiz</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .summary { margin-top: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+    .qna { margin-bottom: 15px; }
+    .qna strong { display: block; }
+  </style>
+</head>
+<body>
+  <h1>AI Interview Quiz (Speech Input)</h1>
+
+  <p id="question">Q1: Loading...</p>
+  <button onclick="startListening()">🎤 Start Speaking</button>
+  <button onclick="stopListening()">⏹ Stop</button>
+  
+  <p><strong>Transcript:</strong> <span id="transcript"></span></p>
+  <p id="output"></p>
+  <button onclick="nextQuestion()">Next Question</button>
+
+  <h2 id="finalScore"></h2>
+  <div id="summary" class="summary"></div>
+
+  <script>
+    let recognition;
+    let isListening = false;
+    let transcriptData = "";
+    let currentIndex = 0;
+
+    // Store user data
+    let scores = [];
+    let answers = [];
+
+    function speakText(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    speechSynthesis.speak(utterance);
+    }
+
+
+    // Questions from Flask
+    const questions = {{ questions|tojson }};
+    document.getElementById("question").innerText = "Q1: " + questions[0];
+    speakText("Question 1. " + questions[0]); 
+
+
+    // Speech Recognition setup
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = async function(event) {
+        let lastResult = event.results[event.results.length - 1][0].transcript;
+        transcriptData += lastResult + " ";
+        document.getElementById("transcript").innerText = transcriptData;
+
+        // Send recognized answer to Flask for scoring
+        const response = await fetch("/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answer: transcriptData,
+            question_index: currentIndex
+          })
+        });
+
+        const result = await response.json();
+        document.getElementById("output").innerText =
+          `Score: ${result.score}`;
+
+        // Save answer + score
+        answers[currentIndex] = transcriptData;
+        scores[currentIndex] = result.score;
+      };
+
+      recognition.onerror = function(event) {
+        console.error("Speech recognition error:", event.error);
+      };
+
+    } else {
+      alert("Your browser does not support Speech Recognition API.");
+    }
+
+    function startListening() {
+      if (!isListening && recognition) {
+        transcriptData = ""; 
+        document.getElementById("transcript").innerText = "";
+        recognition.start();
+        isListening = true;
+        console.log("Listening started");
+
+        if (currentIndex === 0) {
+        speakText("Question 1. " + questions[0]);
+        }
+      }
+    }
+
+    function stopListening() {
+      if (isListening && recognition) {
+        recognition.stop();
+        isListening = false;
+        console.log("Listening stopped");
+      }
+    }
+
+    function nextQuestion() {
+      if (currentIndex < questions.length - 1) {
+        currentIndex++;
+        document.getElementById("question").innerText =
+          `Q${currentIndex + 1}: ${questions[currentIndex]}`;
+        document.getElementById("transcript").innerText = "";
+        document.getElementById("output").innerText = "";
+        transcriptData = "";
+        speakText("Question " + (currentIndex + 1) + ". " + questions[currentIndex]);
+      } else {
+        showFinalResults();
+      }
+    }
+
+    function showFinalResults() {
+      document.getElementById("question").innerText = "🎉 Quiz Finished!";
+      document.getElementById("transcript").style.display = "none";
+      document.getElementById("output").style.display = "none";
+
+      // Calculate final score
+      let total = scores.reduce((a, b) => a + b, 0);
+      let average = (total / questions.length).toFixed(2);
+      document.getElementById("finalScore").innerText =
+        `✅ Your Final Score: ${average * 10} / 100`;
+
+      // Show summary (Q + Answer + Score)
+      let summaryHTML = "<h3>📋 Summary</h3>";
+      for (let i = 0; i < questions.length; i++) {
+        summaryHTML += `
+          <div class="qna">
+            <strong>Q${i+1}: ${questions[i]}</strong>
+            <p><em>Answer:</em> ${answers[i] || "❌ No Answer"}</p>
+            <p><em>Score:</em> ${scores[i] !== undefined ? scores[i] : 0}</p>
+          </div>
+        `;
+      }
+      document.getElementById("summary").innerHTML = summaryHTML;
+    }
+  </script>
+</body>
+</html>

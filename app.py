@@ -12,13 +12,14 @@ def home():
     </head>
     <body style="text-align:center; margin-top: 50px;">
         <h1>Hello, World!</h1>
-        <p>This is served using Python + HTML</p>
+        <p>This is served using Python + HTML + CSS</p>
     </body>
     </html>
     """
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
